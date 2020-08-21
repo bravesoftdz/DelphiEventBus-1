@@ -46,10 +46,7 @@ type
       ASrcObj: TObject
     ): TObject; static;
 
-    class procedure CopyObject(
-      ASrcObj: TObject;
-      ADesObj: TObject
-    ); static;
+    class procedure CopyObject(ASrcObj: TObject; var ADesObj: TObject); static;
 
     class function CreateObject(
       AQualifiedClassName: string
@@ -223,93 +220,56 @@ end;
 class function TRttiUtils.Clone(ASrcObj: TObject): TObject;
 begin
   Result := nil;
-  if not Assigned(ASrcObj) then Exit;
-
-  var LRttiType := RttiContext.GetType(ASrcObj.ClassType);
-  var LCloned := CreateObject(LRttiType); // Create the clone first.
-
-  for var LField in LRttiType.GetFields do begin
-    if not LField.FieldType.IsInstance then begin
-      LField.SetValue(LCloned, LField.GetValue(ASrcObj))
-    end
-    else begin
-      var LSrcFieldValAsObj := LField.GetValue(ASrcObj).AsObject;
-
-      if LSrcFieldValAsObj is TStream then begin
-        var LSrcFieldValAsStream := TStream(LSrcFieldValAsObj);
-        var LDesFieldValAsStream: TStream;
-        var LSavedPosition := LSrcFieldValAsStream.Position;
-        LSrcFieldValAsStream.Position := 0;
-
-        if LField.GetValue(LCloned).IsEmpty then begin
-          LDesFieldValAsStream := TMemoryStream.Create;
-          LField.SetValue(LCloned, LDesFieldValAsStream);
-        end
-        else begin
-          LDesFieldValAsStream := LField.GetValue(LCloned).AsObject as TStream;
-        end;
-
-        LDesFieldValAsStream.Position := 0;
-        LDesFieldValAsStream.CopyFrom(LSrcFieldValAsStream, LSrcFieldValAsStream.Size);
-        LDesFieldValAsStream.Position := LSavedPosition;
-        LSrcFieldValAsStream.Position := LSavedPosition;
-      end
-      else begin
-        if LSrcFieldValAsObj is TObjectList<TObject> then begin
-          var LSrcFieldValAsCollection := TObjectList<TObject>(LSrcFieldValAsObj); // Type cast
-          var LDesFieldValAsCollection: TObjectList<TObject>;
-
-          if LField.GetValue(LCloned).IsEmpty then begin
-            LDesFieldValAsCollection := TObjectList<TObject>.Create;
-            LField.SetValue(LCloned, LDesFieldValAsCollection);
-          end
-          else begin
-            LDesFieldValAsCollection := LField.GetValue(LCloned).AsObject as TObjectList<TObject>;
-          end;
-
-          // Must clear any existing collection items.
-          LDesFieldValAsCollection.Clear;
-
-          for var I := 0 to LSrcFieldValAsCollection.Count - 1 do begin
-            LDesFieldValAsCollection.Add(TRttiUtils.Clone(LSrcFieldValAsCollection[I]));
-          end;
-        end
-        else begin
-          var LDesFieldValAsObj: TObject;
-
-          if LField.GetValue(LCloned).IsEmpty then begin
-            LDesFieldValAsObj := TRttiUtils.Clone(LSrcFieldValAsObj);
-            LField.SetValue(LCloned, LDesFieldValAsObj);
-          end
-          else begin // The cloned object's constructor may have initialized the field.
-            LDesFieldValAsObj := LField.GetValue(LCloned).AsObject;
-            TRttiUtils.CopyObject(LSrcFieldValAsObj, LDesFieldValAsObj);
-          end;
-
-          LField.SetValue(LCloned, LDesFieldValAsObj);
-        end;
-      end;
-    end;
-  end;
-
-  Result := LCloned;
+  CopyObject(ASrcObj, Result);
 end;
 
-class procedure TRttiUtils.CopyObject(ASrcObj, ADesObj: TObject);
+procedure CopyAsStream(ASrc: TObject; var ADes: TObject);
 begin
-  if not Assigned(ASrcObj) then begin
-    raise Exception.Create('CopyObject source object null reference ');
+  var LSrcStream := TStream(ASrc);
+  if not Assigned(ADes) then ADes := TStream.Create;
+  var LDesStream := TStream(ADes);
+  var LSavedPosition := LSrcStream.Position;
+
+  LSrcStream.Position := 0;
+  LDesStream.Position := 0;
+  LDesStream.CopyFrom(LSrcStream, LSrcStream.Size);
+  LSrcStream.Position := LSavedPosition;
+  LDesStream.Position := LSavedPosition;
+end;
+
+procedure CopyAsWrappedList(ASrc: TObject; var ADes: TObject);
+begin
+  if not Assigned(ADes) then begin
+    ADes := TRttiUtils.CreateObject(TRttiUtils.RttiContext.GetType(ASrc.ClassType));
   end;
 
+  var LSrcList := WrapAsList(ASrc);
+  var LDesList := WrapAsList(ADes);
+
+  LDesList.Clear;
+
+  for var I := 0 to LSrcList.Count - 1 do begin
+    var LNewObj := TRttiUtils.Clone(LSrcList.GetItem(I));
+    LDesList.Add(LNewObj);
+  end;
+end;
+
+class procedure TRttiUtils.CopyObject(ASrcObj: TObject; var ADesObj: TObject);
+begin
+  if not Assigned(ASrcObj) then begin
+    FreeAndNil(ADesObj);
+    Exit;
+  end;
+
+  var LRttiType := RttiContext.GetType(ASrcObj.ClassType);
+
   if not Assigned(ADesObj) then begin
-    raise Exception.Create('CopyObject destination object null reference ');
+    ADesObj := CreateObject(LRttiType);
   end;
 
   if ASrcObj.ClassType <> ADesObj.ClassType then begin
     raise Exception.Create('CopyObject source object and destination object are of different class type');
   end;
-
-  var LRttiType := RttiContext.GetType(ASrcObj.ClassType);
 
   for var LField in LRttiType.GetFields do begin
     if not LField.FieldType.IsInstance then begin
@@ -317,68 +277,27 @@ begin
     end
     else begin
       var LSrcFieldValAsObj := LField.GetValue(ASrcObj).AsObject;
-      if LSrcFieldValAsObj is TStream then begin
-        var LSrcFieldValAsStream := TStream(LSrcFieldValAsObj);
-        var LSavedPosition := LSrcFieldValAsStream.Position;
-        LSrcFieldValAsStream.Position := 0;
+      var LDesFieldValAsObj := LField.GetValue(ADesObj).AsObject; // Can be nil
 
-        var LDesFieldValAsStream: TStream;
-        if LField.GetValue(ASrcObj).IsEmpty then begin
-          LDesFieldValAsStream := TMemoryStream.Create;
-          LField.SetValue(ADesObj, LDesFieldValAsStream);
-        end
-        else begin
-          LDesFieldValAsStream := LField.GetValue(ADesObj).AsObject as TStream;
-        end;
+      if LSrcFieldValAsObj is TStream then
+        CopyAsStream(LSrcFieldValAsObj, LDesFieldValAsObj)
+      else if TDuckTypedList.CanBeWrappedAsList(LSrcFieldValAsObj) then
+        CopyAsWrappedList(LSrcFieldValAsObj, LDesFieldValAsObj)
+      else
+        TRttiUtils.CopyObject(LSrcFieldValAsObj, LDesFieldValAsObj);
 
-        LDesFieldValAsStream.Position := 0;
-        LDesFieldValAsStream.CopyFrom(LSrcFieldValAsStream, LSrcFieldValAsStream.Size);
-        LDesFieldValAsStream.Position := LSavedPosition;
-        LSrcFieldValAsStream.Position := LSavedPosition;
-      end
-      else begin
-        if TDuckTypedList.CanBeWrappedAsList(LSrcFieldValAsObj) then begin
-          var LSrcFieldValAsCollection := WrapAsList(LSrcFieldValAsObj);
-          var LDesFieldValAsCollection: IWrappedList;
-
-          if LField.GetValue(ADesObj).IsEmpty then begin
-            LDesFieldValAsCollection := WrapAsList(CreateObject(LField.FieldType));
-            LField.SetValue(ADesObj, LDesFieldValAsCollection.WrappedObject);
-          end
-          else begin
-            LDesFieldValAsCollection := WrapAsList(LField.GetValue(ADesObj).AsObject);
-          end;
-
-          LDesFieldValAsCollection.Clear;
-          for var I := 0 to LSrcFieldValAsCollection.Count - 1 do begin
-           LDesFieldValAsCollection.Add(TRttiUtils.Clone(LSrcFieldValAsCollection.GetItem(I)));
-          end;
-        end
-        else begin
-          var LDesFieldValAsObj: TObject;
-          if LField.GetValue(ADesObj).IsEmpty then begin
-            LDesFieldValAsObj := TRttiUtils.Clone(LSrcFieldValAsObj);
-            LField.SetValue(ADesObj, LDesFieldValAsObj);
-          end
-          else begin
-            LDesFieldValAsObj := LField.GetValue(ADesObj).AsObject;
-            TRttiUtils.CopyObject(LSrcFieldValAsObj, LDesFieldValAsObj);
-          end;
-        end;
-      end;
-    end;
+      LField.SetValue(ADesObj, LDesFieldValAsObj);
+    end
   end;
 end;
 
 class function TRttiUtils.CreateObject(AQualifiedClassName: string): TObject;
 begin
   var LRttiType := RttiContext.FindType(AQualifiedClassName);
-  if Assigned(LRttitype) then begin
+  if Assigned(LRttitype) then
     Result := CreateObject(LRttiType)
-  end
-  else begin
+  else
     raise Exception.CreateFmt('Cannot find RTTI for %s. Is the type linked in the module?', [AQualifiedClassName]);
-  end;
 end;
 
 class function TRttiUtils.CreateObject(ARttiType: TRttiType): TObject;
@@ -395,8 +314,9 @@ begin
     end;
   end;
 
-  if not Assigned(Result) then
+  if not Assigned(Result) then begin
     raise Exception.Create('Cannot find a proper constructor for ' + ARttiType.ToString);
+  end;
   { Second solution, dirty and fast }
   // Result := TObject(ARttiType.GetMethod('Create').Invoke(ARttiType.AsInstance.MetaclassType, []).AsObject);
 end;
@@ -411,12 +331,10 @@ begin
       var LField := ADataSet.FindField(LProp.Name);
 
       if Assigned(LField) and not LField.ReadOnly then begin
-        if LField is TIntegerField then begin
+        if LField is TIntegerField then
           SetProperty(AObj, LProp.Name, TIntegerField(LField).Value)
-        end
-        else begin
-          SetProperty(AObj, LProp.Name, TValue.From<Variant>(LField.Value))
-        end;
+        else
+          SetProperty(AObj, LProp.Name, TValue.From<Variant>(LField.Value));
       end;
     end;
   end;
@@ -477,8 +395,7 @@ class function TRttiUtils.GetAttribute<T>(const ARttiObj: TRttiObject): T;
 begin
   Result := nil;
   var LAttrs := ARttiObj.GetAttributes;
-  for var LAttr in  LAttrs do
-  begin
+  for var LAttr in  LAttrs do begin
     if LAttr.ClassType.InheritsFrom(T) then Exit(T(LAttr));
   end;
 end;
@@ -555,19 +472,19 @@ end;
 class function TRttiUtils.GetProperty(AObj: TObject; const APropName: string): TValue;
 begin
   var LRttiType := RttiContext.GetType(AObj.ClassType);
-  if not Assigned(LRttiType) then raise Exception.CreateFmt('Cannot get RTTI for type [%s]', [LRttiType.ToString]);
+  if not Assigned(LRttiType) then begin
+    raise Exception.CreateFmt('Cannot get RTTI for type [%s]', [LRttiType.ToString]);
+  end;
 
   var LProp := LRttiType.GetProperty(APropName);
   if not Assigned(LProp) then begin
     raise Exception.CreateFmt('Cannot get RTTI for property [%s.%s]', [LRttiType.ToString, APropName]);
   end;
 
-  if LProp.IsReadable then begin
+  if LProp.IsReadable then
     Result := LProp.GetValue(AObj)
-  end
-  else begin
+  else
     raise Exception.CreateFmt('Property is not readable [%s.%s]', [LRttiType.ToString, APropName]);
-  end;
 end;
 
 class function TRttiUtils.GetPropertyAsString(AObj: TObject; const APropName: string): string;
@@ -695,12 +612,10 @@ begin
   end
   else begin
     var LProp := LRttiType.GetProperty(APropName);
-    if Assigned(LProp) then begin
+    if Assigned(LProp) then
       if LProp.IsWritable then LProp.SetValue(AObj, Value)
-    end
-    else begin
+    else
       raise Exception.CreateFmt('Cannot get RTTI for field or property [%s.%s]', [LRttiType.ToString, APropName]);
-    end;
   end;
 end;
 
@@ -716,12 +631,10 @@ begin
     raise Exception.CreateFmt('Cannot get RTTI for property [%s.%s]', [LRttiType.ToString, APropName]);
   end;
 
-  if LProp.IsWritable then begin
+  if LProp.IsWritable then
     LProp.SetValue(AObj, Value)
-  end
-  else begin
-    raise Exception.CreateFmt('Property is not writeable [%s.%s]', [LRttiType.ToString, APropName]);
-  end;
+  else
+    raise Exception.CreateFmt('Property is not writeable [%s.%s]', [LRttiType.ToString, APropName]);  
 end;
 
 class function TRttiUtils.ValueAsString(const Value: TValue; const APropType, ACustomFormat: string): string;
@@ -740,35 +653,26 @@ begin
         Result := '(enumeration)';
     tkFloat:
       begin
-        if APropType = 'datetime' then begin
+        if APropType = 'datetime' then
           if ACustomFormat = '' then
-            Exit(DateTimeToStr(Value.AsExtended))
+            Result := DateTimeToStr(Value.AsExtended)
           else
-            Exit(FormatDateTime(ACustomFormat, Value.AsExtended))
-        end
-        else begin
-          if APropType = 'date' then begin
-            if ACustomFormat = '' then
-              Exit(DateToStr(Value.AsExtended))
-            else
-              Exit(FormatDateTime(ACustomFormat, Trunc(Value.AsExtended)))
-          end
-          else begin
-            if APropType = 'time' then begin
-              if ACustomFormat = '' then
-                Exit(TimeToStr(Value.AsExtended))
-              else
-                Exit(FormatDateTime(ACustomFormat, Frac(Value.AsExtended)))
-            end;
-          end;
-        end;
-
-        if ACustomFormat.IsEmpty then begin
-          Result := FloatToStr(Value.AsExtended)
-        end
-        else begin
-          Result := FormatFloat(ACustomFormat, Value.AsExtended);
-        end;
+            Result := FormatDateTime(ACustomFormat, Value.AsExtended)
+        else if APropType = 'date' then
+          if ACustomFormat = '' then
+            Result := DateToStr(Value.AsExtended)
+          else
+            Result := FormatDateTime(ACustomFormat, Trunc(Value.AsExtended))
+        else if APropType = 'time' then
+          if ACustomFormat = '' then
+            Result := TimeToStr(Value.AsExtended)
+          else
+            Result := FormatDateTime(ACustomFormat, Frac(Value.AsExtended))
+        else
+          if ACustomFormat = '' then
+            Result := FloatToStr(Value.AsExtended)
+          else
+            Result := FormatFloat(ACustomFormat, Value.AsExtended);
       end;
     tkString:
       Result := Value.AsString;

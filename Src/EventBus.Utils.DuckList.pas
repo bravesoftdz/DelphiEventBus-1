@@ -237,16 +237,18 @@ begin
 end;
 
 class function TDuckTypedList.CanBeWrappedAsList(const AObjectAsDuck: TObject): Boolean;
-var
-  LContext: TRttiContext;
 begin
-  Result := Assigned(AObjectAsDuck)
-    and (LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('Add') <> nil)
-    and (LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('Clear') <> nil)
-    and (LContext.GetType(AObjectAsDuck.ClassInfo).GetIndexedProperty('Items').ReadMethod <> nil)
-    and (LContext.GetType(AObjectAsDuck.ClassInfo).GetProperty('Count') <> nil)
-    and ((LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('GetItem' ) <> nil)
-          or (LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('GetElement') <> nil))
+  if not Assigned(AObjectAsDuck) then begin
+    Result := False
+  end
+  else begin
+    var LRttiTy := TRttiUtils.RttiContext.GetType(AObjectAsDuck.ClassInfo);
+    Result := (LRttiTy.GetMethod('Add') <> nil)
+      and (LRttiTy.GetMethod('Clear') <> nil)
+      and (LRttiTy.GetIndexedProperty('Items').ReadMethod <> nil)
+      and (LRttiTy.GetProperty('Count') <> nil)
+      and ((LRttiTy.GetMethod('GetItem' ) <> nil) or (LRttiTy.GetMethod('GetElement') <> nil))
+  end;
 end;
 
 procedure TDuckTypedList.Clear;
@@ -256,12 +258,10 @@ end;
 
 function TDuckTypedList.Count: Integer;
 begin
-  if Assigned(FCountProperty) then begin
+  if Assigned(FCountProperty) then
     Result := FCountProperty.GetValue(FObjectAsDuck).AsInteger
-  end
-  else begin
-    Result := FGetCountMethod.Invoke(FObjectAsDuck, []).AsInteger
-  end;
+  else
+    Result := FGetCountMethod.Invoke(FObjectAsDuck, []).AsInteger;
 end;
 
 function TDuckTypedList.GetEnumerator: TDormListEnumerator;
@@ -284,20 +284,14 @@ var
   I, J: Integer;
   LObj: TObject;
 begin
-  { 07/08/2013: This method is based on QuickSort procedure from Classes.pas, (c) Borland Software Corp.
-    but modified to be part of TDuckListU unit. It implements the standard quicksort algorithm, delegating
-    comparison operation to an anonimous. The Borland version delegates to a pure function pointer, which
-    is problematic in some cases. }
   repeat
     I := L;
     J := R;
     LObj := AList.GetItem((L+R) shr 1);
 
     repeat
-      while AComparer(TObject(AList.GetItem(I)), LObj) < 0 do
-        Inc(I);
-      while AComparer(TObject(AList.GetItem(J)), LObj) > 0 do
-        Dec(J);
+      while AComparer(TObject(AList.GetItem(I)), LObj) < 0 do Inc(I);
+      while AComparer(TObject(AList.GetItem(J)), LObj) > 0 do Dec(J);
 
       if I <= J then begin
         TRttiUtils.MethodCall(AList.WrappedObject, 'Exchange', [I, J]);
@@ -306,8 +300,7 @@ begin
       end;
     until I > J;
 
-    if L < J then
-      QuickSort(AList, L, J, AComparer);
+    if L < J then QuickSort(AList, L, J, AComparer);
     L := I;
   until I >= R;
 end;
@@ -324,18 +317,26 @@ end;
 
 procedure TDuckTypedList.Sort(const APropName: string; ADirection: TSortingDirection = Ascending);
 begin
-  if ADirection = Ascending then
-    QuickSort(Self,
-      function(Left, Right: TObject): Integer
+  if ADirection = Ascending then begin
+    QuickSort(
+      Self
+      ,
+      function(L, R: TObject): Integer
       begin
-        Result := CompareValue(TRttiUtils.GetProperty(Left, APropName), TRttiUtils.GetProperty(Right, APropName));
-      end)
-  else
-    QuickSort(Self,
-      function(Left, Right: TObject): Integer
+        Result := CompareValue(TRttiUtils.GetProperty(L, APropName), TRttiUtils.GetProperty(R, APropName));
+      end
+    )
+  end
+  else begin
+    QuickSort(
+      Self
+      ,
+      function(L, R: TObject): Integer
       begin
-        Result := -1 * CompareValue(TRttiUtils.GetProperty(Left, APropName), TRttiUtils.GetProperty(Right, APropName));
-      end);
+        Result := -1 * CompareValue(TRttiUtils.GetProperty(L, APropName), TRttiUtils.GetProperty(R, APropName));
+      end
+    );
+  end;
 end;
 
 function TDuckTypedList.WrappedObject: TObject;
