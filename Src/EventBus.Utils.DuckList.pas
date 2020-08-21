@@ -240,12 +240,13 @@ class function TDuckTypedList.CanBeWrappedAsList(const AObjectAsDuck: TObject): 
 var
   LContext: TRttiContext;
 begin
-  Result := (LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('Add') <> nil)
+  Result := Assigned(AObjectAsDuck)
+    and (LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('Add') <> nil)
     and (LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('Clear') <> nil)
     and (LContext.GetType(AObjectAsDuck.ClassInfo).GetIndexedProperty('Items').ReadMethod <> nil)
-    and((LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('GetItem' )<> nil)
-         or (LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('GetElement') <> nil))
-    and(LContext.GetType(AObjectAsDuck.ClassInfo).GetProperty('Count') <> nil)
+    and (LContext.GetType(AObjectAsDuck.ClassInfo).GetProperty('Count') <> nil)
+    and ((LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('GetItem' ) <> nil)
+          or (LContext.GetType(AObjectAsDuck.ClassInfo).GetMethod('GetElement') <> nil))
 end;
 
 procedure TDuckTypedList.Clear;
