@@ -43,9 +43,9 @@ type
     [Test]
     procedure TestPostEntityWithCustomCloneEvent;
     [Test]
-    procedure TestPostEntityWithItsSelfInChildObjectKO;
+    procedure TestPostEntityWithItsSelfInChildObject;
     [Test]
-    procedure TestPostEntityWithItsSelfInChildObjectOkCustomCloningClass;
+    procedure TestPostEntityWithItsSelfInChildObjectAndCustomCloningClass;
     [Test]
     procedure TestPostEntityWithObjectList;
     [Test]
@@ -178,7 +178,7 @@ begin
     GlobalEventBus.Post(LEvent);
   end;
 
-  for I := 0 to 50 do TThread.Sleep(20);
+  TThread.Sleep(2000);
   Assert.AreEqual(10, TBackgroundEvent(Subscriber.LastEvent).Count);
 end;
 
@@ -194,7 +194,7 @@ begin
     GlobalEventBus.Post('test_channel_bkg', LMSG);
   end;
 
-  for I := 0 to 50 do TThread.Sleep(20);
+  TThread.Sleep(2000);
   Assert.AreEqual(LMsg, ChannelSubscriber.LastChannelMsg);
 end;
 
@@ -309,7 +309,7 @@ begin
   end;
 end;
 
-procedure TEventBusTest.TestPostEntityWithItsSelfInChildObjectKO;
+procedure TEventBusTest.TestPostEntityWithItsSelfInChildObject;
 var
   LPerson: TPerson;
   LSubscriber: TPersonSubscriber;
@@ -320,17 +320,15 @@ begin
     GlobalEventBus.RegisterSubscriberForEvents(LSubscriber);
     LPerson := TPerson.Create;
     LPerson.Firstname := 'Howard';
-    LPerson.Lastname := 'Stark';
+    LPerson.Lastname  := 'Stark';
     Assert.WillRaiseWithMessage(
       procedure
       begin
-        // simulate the stackoverflow exception, that should be generate by next codes
+        // Simulate the stackoverflow exception, that should be generate by next codes
         raise Exception.Create('stackoverflow exception');
-        // stackoverflow by TRTTIUtils.clone
+        // Stackoverflow by TRttiUtils.clone
         LPerson.Child := LPerson;
         GlobalEventBus.Post(TBaseEventBusEvent<TPerson>.Create(LPerson));
-        Assert.AreEqual('Howard', LSubscriber.Person.Firstname);
-        Assert.AreEqual('Tony', LSubscriber.Person.Child.Firstname);
       end
       ,
       nil
@@ -343,7 +341,7 @@ begin
   end;
 end;
 
-procedure TEventBusTest.TestPostEntityWithItsSelfInChildObjectOkCustomCloningClass;
+procedure TEventBusTest.TestPostEntityWithItsSelfInChildObjectAndCustomCloningClass;
 var
   LPerson: TPerson;
   LSubscriber: TPersonSubscriber;
@@ -351,18 +349,19 @@ begin
   LSubscriber := TPersonSubscriber.Create;
   try
     GlobalEventBus.AddCustomClassCloning(
-     'EventBus.TBaseEventBusEvent<TestObjects.TPerson>'
+     'EventBus.TBaseEventBusEvent<BasicObjects.TPerson>'
       ,
       function(AObject: TObject): TObject
       begin
         var LEvent := TBaseEventBusEvent<TPerson>.Create;
-        LEvent.DataOwner := (AObject as TBaseEventBusEvent<TPerson>).DataOwner;
+        var LSrcObj := AObject as TBaseEventBusEvent<TPerson>;
+        LEvent.DataOwner := LSrcObj.DataOwner;
         LEvent.Data := TPerson.Create;
-        LEvent.Data.Firstname := (AObject as TBaseEventBusEvent<TPerson>).Data.Firstname;
-        LEvent.Data.Lastname := (AObject as TBaseEventBusEvent<TPerson>).Data.Lastname;
+        LEvent.Data.Firstname := LSrcObj.Data.Firstname;
+        LEvent.Data.Lastname  := LSrcObj.Data.Lastname;
         LEvent.Data.Child := TPerson.Create;
-        LEvent.Data.Child.Firstname := (AObject as TBaseEventBusEvent<TPerson>).Data.Child.Firstname;
-        LEvent.Data.Child.Lastname := (AObject as TBaseEventBusEvent<TPerson>).Data.Child.Lastname;
+        LEvent.Data.Child.Firstname := LSrcObj.Data.Child.Firstname;
+        LEvent.Data.Child.Lastname  := LSrcObj.Data.Child.Lastname;
         Result := LEvent;
       end
     );
