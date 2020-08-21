@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{B3B93BCA-EDAF-4F68-A897-370B391FBE5A}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="Src\DelphiEventBus.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="tests\DelphiEventBusTest.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="DelphiEventBus">
+        <MSBuild Projects="Src\DelphiEventBus.dproj"/>
+    </Target>
+    <Target Name="DelphiEventBus:Clean">
+        <MSBuild Projects="Src\DelphiEventBus.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DelphiEventBus:Make">
+        <MSBuild Projects="Src\DelphiEventBus.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="DelphiEventBusTest">
+        <MSBuild Projects="tests\DelphiEventBusTest.dproj"/>
+    </Target>
+    <Target Name="DelphiEventBusTest:Clean">
+        <MSBuild Projects="tests\DelphiEventBusTest.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DelphiEventBusTest:Make">
+        <MSBuild Projects="tests\DelphiEventBusTest.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="DelphiEventBus;DelphiEventBusTest"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="DelphiEventBus:Clean;DelphiEventBusTest:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="DelphiEventBus:Make;DelphiEventBusTest:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

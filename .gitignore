@@ -1,0 +1,12 @@
+Win32
+Win64
+Android
+__history
+__recovery
+*.dcu
+*.dcp
+*.bpl
+*.local
+*.identcache
+*.tvsconfig
+*.stat
