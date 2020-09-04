@@ -31,6 +31,8 @@ uses
 type
   TEventBus = class(TInterfacedObject, IEventBus)
   private
+    class var MREW: TLightweightMREW;
+  private
     FCustomClonerDict: TDictionary<string, TCloneEventMethod>;
     FOnCloneEvent: TCloneEventCallback;
     FSubscriberChannels: TObjectDictionary<TObject, TList<string>>;
@@ -89,9 +91,6 @@ uses
   System.Rtti,
   System.Threading,
   EventBus.Utils.Rtti;
-
-var
-  MultiReadExclusiveWriteSync: TMultiReadExclusiveWriteSynchronizer;
 
 constructor TEventBus.Create;
 begin
@@ -221,27 +220,27 @@ end;
 
 function TEventBus.IsRegisteredForChannels(ASubscriber: TObject): Boolean;
 begin
-  MultiReadExclusiveWriteSync.BeginRead;
+  MREW.BeginRead;
   try
     Result := FSubscriberChannels.ContainsKey(ASubscriber);
   finally
-    MultiReadExclusiveWriteSync.EndRead;
+    MREW.EndRead;
   end;
 end;
 
 function TEventBus.IsRegisteredForEvents(ASubscriber: TObject): Boolean;
 begin
-  MultiReadExclusiveWriteSync.BeginRead;
+  MREW.BeginRead;
   try
     Result := FSubscriberEvents.ContainsKey(ASubscriber);
   finally
-    MultiReadExclusiveWriteSync.EndRead;
+    MREW.EndRead;
   end;
 end;
 
 procedure TEventBus.Post(const AChannel, AMessage: string);
 begin
-  MultiReadExclusiveWriteSync.BeginRead;
+  MREW.BeginRead;
   try
     var LSubscriptions: TObjectList<TSubscription>;
     if FSubscriptionsOfGivenChannel.TryGetValue(AChannel, LSubscriptions) then begin
@@ -253,7 +252,7 @@ begin
       end
     end;
   finally
-    MultiReadExclusiveWriteSync.EndRead;
+    MREW.EndRead;
   end;
 end;
 
@@ -261,7 +260,7 @@ procedure TEventBus.Post(AEvent: TObject; const AContext: string; AEventMM: TEve
 begin
   Assert(Assigned(AEvent), 'Event cannot be nil'); // Main event must not be nil.
 
-  MultiReadExclusiveWriteSync.BeginRead;
+  MREW.BeginRead;
   try
     try
       var LSubscriptions: TObjectList<TSubscription>;
@@ -279,7 +278,7 @@ begin
       if (AEventMM in [Automatic, ManualAndFreeMain]) then AEvent.Free; // Free "main" event.
     end;
   finally
-    MultiReadExclusiveWriteSync.EndRead;
+    MREW.EndRead;
   end;
 end;
 
@@ -331,7 +330,7 @@ end;
 
 procedure TEventBus.RegisterSubscriberForChannels(ASubscriber: TObject);
 begin
-  MultiReadExclusiveWriteSync.BeginWrite;
+  MREW.BeginWrite;
   try
     if Assigned(ASubscriber) then begin
       var LMethods := TSubscribersFinder.FindChannelsSubcriberMethods(ASubscriber.ClassType, True);
@@ -341,13 +340,13 @@ begin
       raise Exception.Create('Invalid subscriber with null reference.');
     end;
   finally
-    MultiReadExclusiveWriteSync.EndWrite;
+   MREW.EndWrite;
   end;
 end;
 
 procedure TEventBus.RegisterSubscriberForEvents(ASubscriber: TObject);
 begin
-  MultiReadExclusiveWriteSync.BeginWrite;
+  MREW.BeginWrite;
   try
     if Assigned(ASubscriber) then begin
       var LMethods := TSubscribersFinder.FindEventsSubscriberMethods(ASubscriber.ClassType, True);
@@ -357,7 +356,7 @@ begin
       raise Exception.Create('Invalid subscriber with null reference.');
     end;
   finally
-    MultiReadExclusiveWriteSync.EndWrite;
+    MREW.EndWrite;
   end;
 end;
 
@@ -436,7 +435,7 @@ end;
 
 procedure TEventBus.UnregisterForChannels(ASubscriber: TObject);
 begin
-  MultiReadExclusiveWriteSync.BeginWrite;
+  MREW.BeginWrite;
   try
     var LChannels: TList<string>;
     if FSubscriberChannels.TryGetValue(ASubscriber, LChannels) then begin
@@ -444,13 +443,13 @@ begin
       FSubscriberChannels.Remove(ASubscriber);
     end;
   finally
-    MultiReadExclusiveWriteSync.EndWrite;
+    MREW.EndWrite;
   end;
 end;
 
 procedure TEventBus.UnregisterForEvents(ASubscriber: TObject);
 begin
-  MultiReadExclusiveWriteSync.BeginWrite;
+  MREW.BeginWrite;
   try
     var LEvents: TList<TClass>;
     if FSubscriberEvents.TryGetValue(ASubscriber, LEvents) then
@@ -459,7 +458,7 @@ begin
       FSubscriberEvents.Remove(ASubscriber);
     end;
   finally
-    MultiReadExclusiveWriteSync.EndWrite;
+    MREW.EndWrite;
   end;
 end;
 
@@ -488,11 +487,5 @@ begin
     end;
   end;
 end;
-
-initialization
-  MultiReadExclusiveWriteSync := TMultiReadExclusiveWriteSynchronizer.Create;
-
-finalization
-  MultiReadExclusiveWriteSync.Free;
 
 end.
