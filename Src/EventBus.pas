@@ -39,11 +39,8 @@ type
     ManualAndFreeMain
   );
 
-  TCloneEventCallback =
-    function(const AObject: TObject): TObject of object;
-
-  TCloneEventMethod =
-    TFunc<TObject, TObject>;
+  TCloneEventCallback = function(const AObject: TObject): TObject of object;
+  TCloneEventMethod = TFunc<TObject, TObject>;
 
   IEventBus = Interface
     ['{7BDF4536-F2BA-4FBA-B186-09E1EE6C7E35}']
@@ -120,8 +117,10 @@ begin
 end;
 
 constructor ChannelAttribute.Create(const AChannel: string; AThreadMode: TThreadMode = TThreadMode.Posting);
+const
+  _DefaultChannel = 'Default';
 begin
-  if aChannel.IsEmpty then FChannel := 'Default' else FChannel := AChannel;
+  if aChannel.IsEmpty then FChannel := _DefaultChannel else FChannel := AChannel;
   FThreadMode := AThreadMode;
 end;
 
