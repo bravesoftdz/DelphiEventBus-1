@@ -22,7 +22,7 @@ uses
   {$ENDIF }
   DUnitX.Loggers.Xml.NUnit,
   DUnitX.TestFramework,
-  EventBusTest in 'EventBusTest.pas',
+  EventBusTestObject in 'EventBusTestObject.pas',
   BaseTest in 'BaseTest.pas',
   BasicObjects in 'BasicObjects.pas';
 
